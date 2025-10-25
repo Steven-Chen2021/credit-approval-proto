@@ -4,11 +4,11 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint --ext .ts,.vue src",
-    "seed:reset": "tsx src/mocks/reset.ts"
+    "dev": "node ./scripts/run-pnpm-bin.mjs vite bin/vite.js dev",
+    "build": "node ./scripts/run-pnpm-bin.mjs vite bin/vite.js build",
+    "preview": "node ./scripts/run-pnpm-bin.mjs vite bin/vite.js preview",
+    "lint": "node ./scripts/run-pnpm-bin.mjs eslint bin/eslint.js --config .eslintrc.cjs --ext .ts,.vue src",
+    "seed:reset": "node ./scripts/run-pnpm-bin.mjs tsx dist/cli.mjs src/mocks/reset.ts"
   },
   "dependencies": {
     "element-plus": "^2.8.4",
