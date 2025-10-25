@@ -1,90 +1,88 @@
-import { rest } from 'msw';
+import { HttpResponse, http } from 'msw';
 import db from './db';
 
 let integrations = { esamHit: true, dnbHit: true };
 
 export const handlers = [
-  rest.get('/api/integrations', (req, res, ctx) => {
-    return res(ctx.json(integrations));
+  http.get('/api/integrations', () => {
+    return HttpResponse.json(integrations);
   }),
-  rest.post('/api/integrations', async (req, res, ctx) => {
-    const body = await req.json();
+  http.post('/api/integrations', async ({ request }) => {
+    const body = await request.json();
     integrations = { ...integrations, ...body };
-    return res(ctx.json(integrations));
+    return HttpResponse.json(integrations);
   }),
 
-  rest.get('/api/esam-lookup', (req, res, ctx) => {
-    const url = new URL(req.url);
+  http.get('/api/esam-lookup', ({ request }) => {
+    const url = new URL(request.url);
     const name = url.searchParams.get('name') || 'Unknown Co.';
-    if (!integrations.esamHit) return res(ctx.json({ hit: false }));
-    return res(
-      ctx.json({
-        hit: true,
-        name,
-        address: '1 Main St',
-        city: 'LA',
-        state: 'CA',
-        zip: '90001',
-        website: 'https://example.com',
-      })
-    );
+    if (!integrations.esamHit) return HttpResponse.json({ hit: false });
+    return HttpResponse.json({
+      hit: true,
+      name,
+      address: '1 Main St',
+      city: 'LA',
+      state: 'CA',
+      zip: '90001',
+      website: 'https://example.com',
+    });
   }),
 
-  rest.get('/api/dnb-lookup', (req, res, ctx) => {
-    const url = new URL(req.url);
+  http.get('/api/dnb-lookup', ({ request }) => {
+    const url = new URL(request.url);
     const name = url.searchParams.get('name') || 'Unknown Co.';
-    if (!integrations.dnbHit) return res(ctx.json({ hit: false }));
+    if (!integrations.dnbHit) return HttpResponse.json({ hit: false });
     const ageYears = Math.floor(Math.random() * 8);
     const companyType = ageYears < 3 ? 'Startup' : 'Corporation';
-    return res(ctx.json({ hit: true, name, ageYears, companyType }));
+    return HttpResponse.json({ hit: true, name, ageYears, companyType });
   }),
 
-  rest.get('/api/applications', (req, res, ctx) => {
-    return res(ctx.json(db.apps.all()));
+  http.get('/api/applications', () => {
+    return HttpResponse.json(db.apps.all());
   }),
-  rest.post('/api/applications', async (req, res, ctx) => {
-    const body = await req.json();
+  http.post('/api/applications', async ({ request }) => {
+    const body = await request.json();
     const created = db.apps.createDraft(body);
-    return res(ctx.json(created));
+    return HttpResponse.json(created);
   }),
-  rest.patch('/api/applications/:id', async (req, res, ctx) => {
-    const patch = await req.json();
-    const item = db.apps.update(req.params.id, patch);
-    return res(ctx.json(item));
+  http.patch('/api/applications/:id', async ({ request, params }) => {
+    const patch = await request.json();
+    const item = db.apps.update(params.id!, patch);
+    return HttpResponse.json(item);
   }),
-  rest.post('/api/applications/:id/transition', async (req, res, ctx) => {
-    const { next, note } = await req.json();
-    const item = db.apps.transition(req.params.id, next, note);
-    return res(ctx.json(item));
-  }),
-
-  rest.get('/api/applications/:id/referrals', (req, res, ctx) => {
-    return res(ctx.json(db.referrals.list(req.params.id)));
-  }),
-  rest.post('/api/applications/:id/referrals/send', (req, res, ctx) => {
-    return res(ctx.json(db.referrals.send(req.params.id)));
-  }),
-  rest.post('/api/applications/:id/referrals/:rid/reply', async (req, res, ctx) => {
-    const payload = await req.json();
-    return res(ctx.json(db.referrals.reply(req.params.id, req.params.rid, payload)));
+  http.post('/api/applications/:id/transition', async ({ request, params }) => {
+    const { next, note } = await request.json();
+    const item = db.apps.transition(params.id!, next, note);
+    return HttpResponse.json(item);
   }),
 
-  rest.get('/api/i18n', (req, res, ctx) => {
-    return res(ctx.json(db.i18n.getAll()));
+  http.get('/api/applications/:id/referrals', ({ params }) => {
+    return HttpResponse.json(db.referrals.list(params.id!));
   }),
-  rest.patch('/api/i18n', async (req, res, ctx) => {
-    return res(ctx.json(db.i18n.update(await req.json())));
+  http.post('/api/applications/:id/referrals/send', ({ params }) => {
+    return HttpResponse.json(db.referrals.send(params.id!));
   }),
-
-  rest.post('/api/csv/import', async (req, res, ctx) => {
-    return res(ctx.json(db.csv.import(await req.json())));
-  }),
-  rest.post('/api/csv/export', async (req, res, ctx) => {
-    return res(ctx.json(db.csv.export(await req.json())));
+  http.post('/api/applications/:id/referrals/:rid/reply', async ({ request, params }) => {
+    const payload = await request.json();
+    return HttpResponse.json(db.referrals.reply(params.id!, params.rid!, payload));
   }),
 
-  rest.post('/api/seeds/reset', (req, res, ctx) => {
+  http.get('/api/i18n', () => {
+    return HttpResponse.json(db.i18n.getAll());
+  }),
+  http.patch('/api/i18n', async ({ request }) => {
+    return HttpResponse.json(db.i18n.update(await request.json()));
+  }),
+
+  http.post('/api/csv/import', async ({ request }) => {
+    return HttpResponse.json(db.csv.import(await request.json()));
+  }),
+  http.post('/api/csv/export', async ({ request }) => {
+    return HttpResponse.json(db.csv.export(await request.json()));
+  }),
+
+  http.post('/api/seeds/reset', () => {
     db.reset();
-    return res(ctx.json({ ok: true }));
+    return HttpResponse.json({ ok: true });
   }),
 ];
