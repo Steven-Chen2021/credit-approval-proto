@@ -6,7 +6,7 @@
         <el-tag type="info" size="small">MSW</el-tag>
       </div>
       <div class="flex items-center gap-2">
-        <el-select v-model="lang" size="small" @change="onLang" style="width:140px">
+        <el-select v-model="lang" size="small" style="width:140px">
           <el-option label="English" value="en" />
           <el-option label="繁體中文" value="zh-TW" />
           <el-option label="简体中文" value="zh-CN" />
@@ -23,6 +23,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
@@ -30,13 +31,19 @@ import { useSettingsStore } from './stores/settings'
 const { t, locale } = useI18n()
 const auth = useAuthStore()
 const settings = useSettingsStore()
-const lang = $ref(settings.lang)
 
-function onLang(v: string) {
-  settings.setLang(v as any)
-  locale.value = v
+const lang = computed({
+  get: () => settings.lang,
+  set: (value: string) => {
+    settings.setLang(value as 'en' | 'zh-TW' | 'zh-CN')
+    locale.value = value
+  },
+})
+
+function logout() {
+  auth.logout()
+  location.href = '/#/login'
 }
-function logout(){ auth.logout(); location.href = '/#/login' }
 </script>
 
 <style>
