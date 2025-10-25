@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { pinia } from '@/stores'
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('@/pages/Login.vue'), meta: { public: true } },  
@@ -20,7 +21,7 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to, _from, next) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore(pinia)
   if (to.meta.public) return next()
   if (!auth.isAuthenticated) return next({ name: 'login' })
   const allowed = to.meta.roles as string[] | undefined
