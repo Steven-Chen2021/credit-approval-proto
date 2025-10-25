@@ -3,7 +3,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('@/pages/Login.vue'), meta: { public: true } },  
-  { path: '/', component: () => import('@/pages/Test.vue') },
+  { path: '/', component: () => import('@/pages/Test.vue'), meta: { public: true } },
   { path: '/applications', component: () => import('@/pages/ApplicationsList.vue'), meta: { roles: ['Sales','Admin','Accounting','L1Manager','L2Manager','StationManager'] } },
   { path: '/applications/new', component: () => import('@/pages/ApplicationEdit.vue'), meta: { roles: ['Sales'] } },
   { path: '/applications/:id/edit', component: () => import('@/pages/ApplicationEdit.vue'), meta: { roles: ['Sales'] } },
