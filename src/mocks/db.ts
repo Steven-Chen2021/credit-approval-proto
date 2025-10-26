@@ -1,6 +1,8 @@
 
 import faker from 'faker'
 import type { Application } from '@/stores/applications'
+import type { Status } from '@/utils/fsm'
+import { canTransition } from '@/utils/fsm'
 import { v4 as uuid } from 'uuid'
 
 const referralTemplates = ['Alpha Trade','Beta Logistics','Gamma Capital']
@@ -13,8 +15,6 @@ function positiveCount(appId: string){
   return list.filter(r=>r.verdict==='positive').length
 }
 
-const statuses = ['Draft','Pending-StationMgr','Pending-CustomerInput','Referral-Sent','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval','Approved','Rejected'] as const
-
 function makeOwners(): Application['owners'] {
   const n = faker.random.number({ min: 1, max: 3 })
   return Array.from({ length: n }).map(() => ({
@@ -24,12 +24,31 @@ function makeOwners(): Application['owners'] {
   }))
 }
 
+function buildLifecycle(ageYears: number): Status[] {
+  const core: Status[] = ageYears < 3
+    ? ['Draft','Pending-StationMgr','Pending-CustomerInput','Referral-Sent','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval','Approved']
+    : ['Draft','Pending-CustomerInput','Referral-Sent','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval','Approved']
+  return core
+}
+
+function pickStatus(ageYears: number): Status {
+  const flow = buildLifecycle(ageYears)
+  const stageIdx = faker.random.number({ min: 0, max: flow.length - 1 })
+  const status = flow[stageIdx]
+  const rejectionEligible: Status[] = ['Pending-StationMgr','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval']
+  if (rejectionEligible.includes(status) && faker.random.boolean()) {
+    return 'Rejected'
+  }
+  return status
+}
+
 function genOne(): Application {
   const id = uuid()
   const ageYears = faker.random.number({ min: 0, max: 8 })
+  const status = pickStatus(ageYears)
   const base: Application = {
     id,
-    status: ageYears<3 ? 'Pending-StationMgr' : faker.random.arrayElement(statuses as any),
+    status,
     company: {
       name: faker.company.companyName(), address: faker.address.streetAddress(),
       city: faker.address.city(), state: faker.address.stateAbbr(), zip: faker.address.zipCode(),
@@ -85,14 +104,16 @@ export default {
       item.audit.push({ at:new Date().toISOString(), by:'sales', action:'create-draft' })
       return item
     },
-    transition: (id: string, next: any, note?: string) => {
+    transition: (id: string, next: Status, note?: string) => {
       const i = apps.findIndex(a=>a.id===id); const a = apps[i]
+      if (!canTransition[a.status].includes(next)) {
+        throw new Error(`Invalid transition from ${a.status} to ${next}`)
+      }
       if (a.company.ageYears < 3 && a.status==='Draft' && next!=='Pending-StationMgr') {
         throw new Error('Age<3 must go to Station Manager first')
       }
       if (a.status==='Referral-Received' && next==='Pending-L1ManagerApproval') {
-        const pc = referrals.filter(r=>r.appId===id && r.verdict==='positive').length
-        if (pc < 2) throw new Error('Need ≥2 positive referrals')
+        if (positiveCount(id) < 2) throw new Error('Need ≥2 positive referrals')
       }
       if (next==='Rejected' && !note) throw new Error('Reject requires reason')
       a.audit.push({ at:new Date().toISOString(), by:(next==='Rejected'?'manager':'system'), action:(next==='Rejected'?'reject':`to-${next}`), note })
