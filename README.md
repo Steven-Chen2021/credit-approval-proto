@@ -1,55 +1,67 @@
 # Trade Credit Approval Prototype
 
-A Vue 3 + Vite single-page application that models the full front-office flow of trade credit approvals. It is deliberately frontend-only and relies on MSW mocks to emulate backend calls, allowing the product team to iterate on UX and domain rules rapidly.
+This project is a Vue 3 + Vite single-page application that prototypes Dimerco's end-to-end trade credit approval workflow. It focuses on coordinating the sales, customer, accounting, and managerial review tasks inside eSAM while supporting Traditional Chinese, Simplified Chinese, and English UI flows.
 
-## Stack
-- Vue 3 with the `<script setup>` composition API
-- Vite build tooling with TypeScript support
-- Pinia for application stores (authentication, applications, diagnostics, etc.)
-- Vue Router with role-aware navigation guards (the root path now redirects to `/applications`)
-- Element Plus component library and vee-validate form validation
-- MSW for realistic API mocks and seed/reset utilities
+## Platform overview
+- **Frontend stack**: Vue 3 (Composition API with `<script setup>`), TypeScript, Vite, Pinia stores, Vue Router, Element Plus, vee-validate.
+- **Mock services**: Mock Service Worker (MSW) emulates APIs, authentication, referrals, and notification hooks so that the entire flow runs without a backend.
+- **Localization**: The application ships with tri-language resources (EN/ZH-TW/ZH-CN) and includes an i18n admin console for runtime edits and resets.
 
-## Getting started
-```bash
-pnpm install
-pnpm dev            # starts Vite with the MSW worker
-pnpm seed:reset     # optional: reseed mock data (can also be done via Diagnostics page)
-pnpm lint
-```
+## Credit application lifecycle
+The prototype models the required status changes, emails, and hand-offs:
 
-The development server runs at http://localhost:5173 by default. MSW is automatically registered so that the mocked APIs and authentication flow work without extra setup.
+1. **Draft** – Sales creates the application in eSAM after completing basic checks. D&B EDI data can be pulled before submission.
+2. **Pending-StationMgr** – Auto-triggered for companies younger than three years. The station manager receives an email; rejection ends the process.
+3. **Pending-CustomerInput** – For companies operating more than three years, the customer is invited to complete the online application and upload documents.
+4. **Referral-Sent / Referral-Received** – Accounting sends the referral check form and captures responses. Each referral is reviewed and marked positive or negative before advancing.
+5. **Pending-L1ManagerApproval** – First-level manager review. Rejection immediately moves the application to **Rejected**.
+6. **Pending-L2ManagerApproval** – Second-level manager review with identical approval/reject rules.
+7. **Approved** – All approvals completed. The system generates and emails the Credit Approval Letter to the customer, copying Sales and Accounting.
+8. **Rejected** – Any rejection in the chain terminates the application.
 
-## Test accounts
-| Role        | Credentials     |
-| ----------- | --------------- |
-| Admin       | admin/demo1234  |
-| Station Mgr | station/demo1234|
-| L1 Reviewer | l1/demo1234     |
-| L2 Reviewer | l2/demo1234     |
-| Accounting  | accounting/demo1234 |
-| Sales       | sales/demo1234  |
+Every transition triggers the expected notification (station manager alerts, customer invitation, referral emails, approval letter dispatch, etc.). Audit trails are displayed inside the application detail view.
 
-## Functional highlights
-1. **Applications lifecycle** — create, edit, review, and audit application records with mock data sources.
-2. **Role-based access** — navigation guards gate each route to the roles defined in `src/router/index.ts`; unauthorized users are redirected to `/applications`.
-3. **Referral checks** — diagnostic helpers ensure referral sanity (AvgDays ≤ 120; PastDue ≤ OpenAR) while remaining adjustable for future iterations.
-4. **Letter generation** — preview approval/rejection letters with manual credit amount input, ready for future integrations.
-5. **Localization tools** — an i18n admin section allows editing translations with the ability to reset to defaults.
+## Credit application form
+Sales previews the full form before submission; customers later complete the same structure online. Key sections include:
+
+- **Company profile** – Company name, address, city, state, ZIP, website (all sourced from eSAM), estimated annual revenue, sales area, company type (Corporation/Partnership/LLC/S Corporation/Proprietorship/Other), bankruptcy flag, date organized, tax ID, employee count, years at current location, landlord information.
+- **Owners / Principals / Officers** – Up to three sets of name, title, address, phone, email, SSN.
+- **Shipping information** – Import frequency per ton/TEU/FEU/CBM and estimated freightage amounts.
+- **Trade references** – Up to three companies with name, contact, address, phone, fax, website, and required email for verification.
+- **Bank references** – Bank details, contact information, checking and savings account numbers, and account tenure.
+- **Authorized representative** – Name, title, signature, submission date (auto-filled), optional driver’s license number, plus captured IP for online signing.
+
+Attachments can be uploaded alongside the online submission.
+
+## Referral checks
+Accounting can generate the credit referral form, track responses, and record whether each reply is positive. At least two positive referrals are required before managerial reviews can proceed. Consistency checks help flag anomalies (e.g., invoice history shorter than company age).
+
+## Approval letter
+Once approvals finish, the system composes the "Credit Approval" letter (based on the provided template) and emails it to the customer with CCs to Sales and Accounting. The letter records the approved terms, credit limit, and advisory notes about ACH setup and credit maintenance expectations.
 
 ## Routes
 - `/` → redirects to `/applications`
 - `/login`
-- `/applications` — list view
-- `/applications/new`, `/applications/:id/edit` — creation/editing form
-- `/applications/:id` — detail view with audit log
-- `/applications/:id/referrals` — accounting referral checks
-- `/reviews/l1`, `/reviews/l2`, `/reviews/station` — manager work queues
-- `/letters/preview?applicationId=...`
-- `/diagnostics`
-- `/settings/i18n`
+- `/applications` – Application list
+- `/applications/new`, `/applications/:id/edit` – Drafting and editing
+- `/applications/:id` – Detail view with audit and status history
+- `/applications/:id/referrals` – Accounting review workspace
+- `/reviews/l1`, `/reviews/l2`, `/reviews/station` – Manager queues
+- `/letters/preview?applicationId=...` – Approval letter preview
+- `/diagnostics` – MSW data seeding/reset tools
+- `/settings/i18n` – Localization editor
 
-## Future considerations
-- Replace MSW mocks with backend APIs and shared authentication.
-- Harden file attachment validation server-side.
-- Extend notification system beyond UI/audit logs once event infrastructure is available.
+## Getting started
+```bash
+pnpm install
+pnpm dev            # start Vite with MSW worker
+pnpm seed:reset     # reseed mock data (can also be done via Diagnostics page)
+pnpm lint
+```
+
+Development runs at http://localhost:5173 with MSW registering automatically so authentication and mocked APIs work out-of-the-box.
+
+## Future extensions
+- Replace MSW mocks with live backend services and unified identity.
+- Automate D&B EDI pulls and referral email delivery through server-side workflows.
+- Add richer analytics for approval turnaround, referral quality, and SLA tracking.
