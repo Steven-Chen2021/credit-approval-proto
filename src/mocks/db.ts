@@ -1,154 +1,318 @@
-
 import faker from 'faker'
-import type { Application } from '@/stores/applications'
-import type { Status } from '@/utils/fsm'
-import { canTransition } from '@/utils/fsm'
 import { v4 as uuid } from 'uuid'
 
-const referralTemplates = ['Alpha Trade','Beta Logistics','Gamma Capital']
+export type OceanBookingStatus = 'Unused' | 'Used'
+export type ContainerType = '20CNT' | '40CNT' | '40HQ'
 
-type Referral = { id: string; appId: string; company: string; sentAt?: string; repliedAt?: string; verdict?: 'positive'|'negative'; highCredit?: number; openAR?: number; pastDue?: number; avgDays?: number; isSecured?: boolean; remarks?: string }
-let referrals: Referral[] = []
-
-function positiveCount(appId: string){
-  const list = referrals.filter(r=>r.appId===appId && r.verdict)
-  return list.filter(r=>r.verdict==='positive').length
+export interface OceanBooking {
+  id: string
+  status: OceanBookingStatus
+  soNo: string
+  blNo?: string
+  pol: string
+  pod: string
+  carrier: string
+  etc?: string | null
+  etd: string
+  eta?: string | null
+  vessel?: string
+  voyage?: string
+  containerType: ContainerType
+  containerQty: number
+  remarks?: string
+  carrierBookingId?: string
+  createdAt: string
+  createdBy: string
+  updatedAt?: string
 }
 
-function makeOwners(): Application['owners'] {
-  const n = faker.random.number({ min: 1, max: 3 })
-  return Array.from({ length: n }).map(() => ({
-    name: faker.name.findName(), title: faker.name.jobTitle(),
-    address: faker.address.streetAddress(), phone: faker.phone.phoneNumber(),
-    email: faker.internet.email(), ssnMasked: `****-**-${faker.random.number({ min:1000, max:9999 })}`
-  }))
+export interface CarrierBookingDraft {
+  id: string
+  carrier: string
+  pol: string
+  pod: string
+  etd: string
+  containerType: ContainerType
+  totalContainerQty: number
+  sourceOceanBookingIds: string[]
+  createdAt: string
+  createdBy: string
+  status: 'Draft' | 'Submitted'
 }
 
-function buildLifecycle(ageYears: number): Status[] {
-  const core: Status[] = ageYears < 3
-    ? ['Draft','Pending-StationMgr','Pending-CustomerInput','Referral-Sent','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval','Approved']
-    : ['Draft','Pending-CustomerInput','Referral-Sent','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval','Approved']
-  return core
+const carriers = ['COSCO', 'EMC', 'SITC']
+const pols = ['CNSHA/Shanghai', 'CNSZX/Shenzhen', 'CNNGB/Ningbo']
+const pods = ['USLAX/Los Angeles', 'USLGB/Long Beach', 'USSEA/Seattle']
+const containerTypes: ContainerType[] = ['20CNT', '40CNT', '40HQ']
+
+let oceanBookings: OceanBooking[] = []
+let carrierDrafts: CarrierBookingDraft[] = []
+
+function randomDateWithin(days: number) {
+  const now = new Date()
+  const end = new Date(now)
+  end.setDate(end.getDate() + days)
+  return faker.date.between(now, end)
 }
 
-function pickStatus(ageYears: number): Status {
-  const flow = buildLifecycle(ageYears)
-  const stageIdx = faker.random.number({ min: 0, max: flow.length - 1 })
-  const status = flow[stageIdx]
-  const rejectionEligible: Status[] = ['Pending-StationMgr','Referral-Received','Pending-L1ManagerApproval','Pending-L2ManagerApproval']
-  if (rejectionEligible.includes(status) && faker.random.boolean()) {
-    return 'Rejected'
-  }
-  return status
-}
-
-function genOne(): Application {
+function makeBooking(): OceanBooking {
   const id = uuid()
-  const ageYears = faker.random.number({ min: 0, max: 8 })
-  const status = pickStatus(ageYears)
-  const base: Application = {
+  const carrier = faker.random.arrayElement(carriers)
+  const pol = faker.random.arrayElement(pols)
+  const pod = faker.random.arrayElement(pods)
+  const etdDate = randomDateWithin(90)
+  const etcDate = new Date(etdDate.getTime() - faker.random.number({ min: 1, max: 3 }) * 24 * 60 * 60 * 1000)
+  const etaDate = new Date(etdDate.getTime() + faker.random.number({ min: 12, max: 20 }) * 24 * 60 * 60 * 1000)
+  const status: OceanBookingStatus = Math.random() < 0.7 ? 'Unused' : 'Used'
+  return {
     id,
     status,
-    company: {
-      name: faker.company.companyName(), address: faker.address.streetAddress(),
-      city: faker.address.city(), state: faker.address.stateAbbr(), zip: faker.address.zipCode(),
-      website: faker.internet.url(), ageYears, companyType: ageYears<3 ? 'Startup':'Corporation'
-    },
-    estimatedAnnualRevenue: faker.random.number({ min: 0, max: 50_000_000 }),
-    salesArea: faker.address.country(),
-    isBankruptcy: faker.random.boolean() && faker.random.number({min:0,max:50})===0,
-    dateOrganized: faker.date.past(8).toISOString().slice(0,10),
-    taxIdNo: faker.random.alphaNumeric(10).toUpperCase(),
-    employees: faker.random.number({min:0,max:1500}),
-    yearsAtLocation: faker.random.number({min:0,max:10}),
-    landlord: faker.company.companyName(),
-    landlordPhone: faker.phone.phoneNumber(),
-    owners: makeOwners(),
-    shipping: { unit: faker.random.arrayElement(['TON','TEU','FEU','CBM']), perMonth: faker.random.number({min:0,max:800}), estFreightUSD: faker.random.number({min:1000,max:2_000_000}) },
-    references: Array.from({length: faker.random.number({min:1,max:3})}).map(()=>({
-      company: faker.company.companyName(), contact: faker.name.findName(), address: faker.address.streetAddress(),
-      phone: faker.phone.phoneNumber(), fax: faker.phone.phoneNumber(), website: faker.internet.url(), email: faker.internet.email()
-    })),
-    bankRefs: [{ bank: faker.company.companyName(), contact: faker.name.findName(), address: faker.address.streetAddress(), phone: faker.phone.phoneNumber(), checkingNoMasked: `***${faker.random.number({min:1000,max:9999})}`, yearsOpen: faker.random.number({min:0,max:20}) }],
-    authorizedRep: { name: faker.name.findName(), title: 'CFO', date: new Date().toISOString().slice(0,10), ip: `${faker.random.number({min:1,max:255})}.${faker.random.number({min:0,max:255})}.${faker.random.number({min:0,max:255})}.${faker.random.number({min:0,max:255})}` },
-    attachments: [],
-    audit: [{ at: new Date().toISOString(), by: 'system', action: 'seed' }],
-    referrals: [],
-    createdBy: faker.random.arrayElement(['sales','admin'])
+    soNo: `SO${faker.random.number({ min: 100000, max: 999999 })}`,
+    blNo: Math.random() > 0.5 ? `BL${faker.random.number({ min: 100000, max: 999999 })}` : undefined,
+    pol,
+    pod,
+    carrier,
+    etc: etcDate.toISOString(),
+    etd: etdDate.toISOString(),
+    eta: etaDate.toISOString(),
+    vessel: `${faker.random.arrayElement(['COSCO', 'EMC', 'SITC'])} ${faker.random.alpha({ count: 3, upcase: true })}`,
+    voyage: `${faker.random.number({ min: 1000, max: 9999 })}`,
+    containerType: faker.random.arrayElement(containerTypes),
+    containerQty: faker.random.number({ min: 1, max: 6 }),
+    remarks: Math.random() > 0.7 ? faker.lorem.sentence() : undefined,
+    createdAt: new Date().toISOString(),
+    createdBy: 'op.tpe01',
+    updatedAt: undefined,
   }
-  return base
 }
 
-let apps: Application[] = Array.from({length: 90}).map(genOne)
+function seed() {
+  oceanBookings = Array.from({ length: 90 }).map(makeBooking)
+  carrierDrafts = []
+  // create drafts for subset of used bookings to simulate assignments
+  const usedBookings = oceanBookings.filter((b) => b.status === 'Used').slice(0, 5)
+  if (usedBookings.length) {
+    createDrafts(usedBookings.map((b) => b.id))
+  }
+}
 
-function sendReferrals(appId: string){
-  referralTemplates.forEach(t=>{
-    referrals.push({ id: uuid(), appId, company: t, sentAt: new Date().toISOString() })
+seed()
+
+function toLower(str?: string) {
+  return (str || '').toLowerCase()
+}
+
+function matches(value: string | undefined, keyword: string | undefined) {
+  if (!keyword) return true
+  return toLower(value).includes(keyword.toLowerCase())
+}
+
+function withinRange(value: string | undefined, from?: string, to?: string) {
+  if (!value) return false
+  const time = new Date(value).getTime()
+  if (from && time < new Date(from).getTime()) return false
+  if (to && time > new Date(to).getTime()) return false
+  return true
+}
+
+function list(query: Record<string, any>) {
+  const {
+    status,
+    soNo,
+    blNo,
+    pol,
+    pod,
+    carrier,
+    etcFrom,
+    etcTo,
+    etdFrom,
+    etdTo,
+    etaFrom,
+    etaTo,
+    vessel,
+    voyage,
+    containerType,
+    page = 1,
+    pageSize = 20,
+    sortBy = 'etd',
+    sortDir = 'asc',
+  } = query
+
+  const statusList = Array.isArray(status) ? status : status ? [status] : []
+  const containerList = Array.isArray(containerType) ? containerType : containerType ? [containerType] : []
+
+  const items = oceanBookings.filter((b) => {
+    if (statusList.length && !statusList.includes(b.status)) return false
+    if (!matches(b.soNo, soNo)) return false
+    if (!matches(b.blNo, blNo)) return false
+    if (pol && toLower(b.pol) !== toLower(pol)) return false
+    if (pod && toLower(b.pod) !== toLower(pod)) return false
+    if (carrier && toLower(b.carrier) !== toLower(carrier)) return false
+    if ((etcFrom || etcTo) && !withinRange(b.etc, etcFrom, etcTo)) return false
+    if ((etdFrom || etdTo) && !withinRange(b.etd, etdFrom, etdTo)) return false
+    if ((etaFrom || etaTo) && !withinRange(b.eta, etaFrom, etaTo)) return false
+    if (!matches(b.vessel, vessel)) return false
+    if (!matches(b.voyage, voyage)) return false
+    if (containerList.length && !containerList.includes(b.containerType)) return false
+    return true
   })
+
+  const sorted = [...items].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    if (sortBy === 'containerQty') return (a.containerQty - b.containerQty) * dir
+    const av = (a as Record<string, any>)[sortBy]
+    const bv = (b as Record<string, any>)[sortBy]
+    if (av === bv) return 0
+    if (av === undefined || av === null) return -dir
+    if (bv === undefined || bv === null) return dir
+    return av > bv ? dir : -dir
+  })
+
+  const start = (Number(page) - 1) * Number(pageSize)
+  const end = start + Number(pageSize)
+
+  return {
+    items: sorted.slice(start, end),
+    total: sorted.length,
+  }
+}
+
+function summary() {
+  const unused = oceanBookings.filter((b) => b.status === 'Unused').length
+  const used = oceanBookings.length - unused
+  return { unused, used }
+}
+
+function ensureUnique(soNo: string, carrier: string, etd: string, excludeId?: string) {
+  const dup = oceanBookings.find(
+    (b) => b.soNo === soNo && b.carrier === carrier && b.etd === etd && b.id !== excludeId
+  )
+  return !dup
+}
+
+function create(data: Partial<OceanBooking>) {
+  const now = new Date().toISOString()
+  const booking: OceanBooking = {
+    id: uuid(),
+    status: 'Unused',
+    soNo: data.soNo!,
+    blNo: data.blNo,
+    pol: data.pol!,
+    pod: data.pod!,
+    carrier: data.carrier!,
+    etc: data.etc,
+    etd: data.etd!,
+    eta: data.eta,
+    vessel: data.vessel,
+    voyage: data.voyage,
+    containerType: data.containerType as ContainerType,
+    containerQty: data.containerQty!,
+    remarks: data.remarks,
+    createdAt: now,
+    createdBy: 'op.tpe01',
+    updatedAt: now,
+  }
+  oceanBookings.unshift(booking)
+  return booking
+}
+
+function update(id: string, patch: Partial<OceanBooking>) {
+  const idx = oceanBookings.findIndex((b) => b.id === id)
+  if (idx === -1) throw new Error('Not found')
+  const updated: OceanBooking = {
+    ...oceanBookings[idx],
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  }
+  oceanBookings[idx] = updated
+  return updated
+}
+
+function updateStatus(ids: string[], status: OceanBookingStatus) {
+  const updated: string[] = []
+  const skipped: string[] = []
+  const now = new Date().toISOString()
+  ids.forEach((id) => {
+    const booking = oceanBookings.find((b) => b.id === id)
+    if (!booking) return
+    if (booking.status === status) {
+      skipped.push(id)
+      return
+    }
+    booking.status = status
+    booking.updatedAt = now
+    if (status === 'Unused') {
+      booking.carrierBookingId = undefined
+    }
+    updated.push(id)
+  })
+  return { updated, skipped }
+}
+
+function createDrafts(ids: string[]) {
+  const grouped = new Map<string, OceanBooking[]>()
+  ids
+    .map((id) => oceanBookings.find((b) => b.id === id))
+    .filter((b): b is OceanBooking => !!b)
+    .forEach((booking) => {
+      const key = [booking.carrier, booking.pol, booking.pod, booking.etd, booking.containerType].join('|')
+      const list = grouped.get(key) || []
+      list.push(booking)
+      grouped.set(key, list)
+    })
+
+  const drafts: CarrierBookingDraft[] = []
+  const now = new Date().toISOString()
+  grouped.forEach((group) => {
+    const first = group[0]
+    const draft: CarrierBookingDraft = {
+      id: uuid(),
+      carrier: first.carrier,
+      pol: first.pol,
+      pod: first.pod,
+      etd: first.etd,
+      containerType: first.containerType,
+      totalContainerQty: group.reduce((sum, item) => sum + item.containerQty, 0),
+      sourceOceanBookingIds: group.map((item) => item.id),
+      createdAt: now,
+      createdBy: 'op.tpe01',
+      status: 'Draft',
+    }
+    carrierDrafts.unshift(draft)
+    group.forEach((booking) => {
+      booking.status = 'Used'
+      booking.carrierBookingId = draft.id
+      booking.updatedAt = now
+    })
+    drafts.push(draft)
+  })
+  return drafts
+}
+
+function assign(ids: string[]) {
+  return createDrafts(ids)
+}
+
+function getDrafts() {
+  return carrierDrafts.slice(0, 50)
+}
+
+function reset() {
+  seed()
 }
 
 export default {
-  reset(){ apps = Array.from({length: 90}).map(genOne); referrals = [] },
-  apps: {
-    all: () => apps,
-    update: (id: string, patch: Partial<Application>) => {
-      const i = apps.findIndex(a=>a.id===id); apps[i] = { ...apps[i], ...patch }
-      apps[i].audit.push({ at:new Date().toISOString(), by:'user', action:'update' })
-      return apps[i]
-    },
-    createDraft: (body: any) => {
-      const item = genOne();
-      item.status = 'Draft';
-      Object.assign(item, body)
-      apps.unshift(item)
-      item.audit.push({ at:new Date().toISOString(), by:'sales', action:'create-draft' })
-      return item
-    },
-    transition: (id: string, next: Status, note?: string) => {
-      const i = apps.findIndex(a=>a.id===id); const a = apps[i]
-      if (!canTransition[a.status].includes(next)) {
-        throw new Error(`Invalid transition from ${a.status} to ${next}`)
-      }
-      if (a.company.ageYears < 3 && a.status==='Draft' && next!=='Pending-StationMgr') {
-        throw new Error('Age<3 must go to Station Manager first')
-      }
-      if (a.status==='Referral-Received' && next==='Pending-L1ManagerApproval') {
-        if (positiveCount(id) < 2) throw new Error('Need ≥2 positive referrals')
-      }
-      if (next==='Rejected' && !note) throw new Error('Reject requires reason')
-      a.audit.push({ at:new Date().toISOString(), by:(next==='Rejected'?'manager':'system'), action:(next==='Rejected'?'reject':`to-${next}`), note })
-      a.status = next
-      return a
-    }
+  reset,
+  ocean: {
+    list,
+    summary,
+    ensureUnique,
+    create,
+    update,
+    updateStatus,
+    assign,
   },
-  referrals: {
-    list: (appId: string) => referrals.filter(r=>r.appId===appId),
-    send: (appId: string) => { sendReferrals(appId); return referrals.filter(r=>r.appId===appId) },
-    reply: (appId: string, rid: string, payload: Partial<Referral>) => {
-      const i = referrals.findIndex(r=>r.id===rid && r.appId===appId)
-      const merged = { ...referrals[i], ...payload, repliedAt: new Date().toISOString() }
-      if (merged.avgDays && merged.avgDays > 120) throw new Error('AvgDays must be <= 120')
-      if ((merged.pastDue||0) > (merged.openAR||0)) throw new Error('PastDue must be <= OpenAR')
-      referrals[i] = merged
-      return referrals[i]
-    }
+  carrier: {
+    drafts: getDrafts,
   },
-  i18n: {
-    getAll: () => ({ }),
-    update: (_patch: any) => ({ ok: true })
-  },
-  csv: {
-    import: ({ rows, updateBlankOnly }: { rows: any[]; updateBlankOnly?: boolean }) => {
-      const errors: any[] = []
-      rows.forEach((r, idx) => {
-        if (!r.CompanyName || !r.EstimatedAnnualRevenue) {
-          errors.push({ idx, field: 'required', message: 'Missing CompanyName or EstimatedAnnualRevenue' })
-        }
-      })
-      return { ok: errors.length===0, errors }
-    },
-    export: ({ filter }: { filter: any }) => {
-      return { ok: true, rows: apps.map(a=>({ CompanyName: a.company.name, EstimatedAnnualRevenue: a.estimatedAnnualRevenue, CompanyType: a.company.companyType })) }
-    }
-  }
 }
