@@ -9,7 +9,10 @@ import { worker } from './mocks/msw'
 
 if (import.meta.env.DEV) {
   // Register MSW using a local worker file shipped in /public for convenience
-  worker.start({ serviceWorker: { url: '/mockServiceWorker.js' } })
+  worker.start({
+    serviceWorker: { url: '/mockServiceWorker.js' },
+    onUnhandledRequest: 'bypass',
+  })
 }
 
 createApp(App)
