@@ -1,22 +1,29 @@
 <template>
-  <el-container>
-    <el-header class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <strong>{{ t('appTitle') }}</strong>
-        <el-tag type="info" size="small">MSW</el-tag>
+  <el-container class="app-shell">
+    <el-header class="app-header">
+      <div class="header-left">
+        <router-link to="/" class="app-title">{{ t('appTitle') }}</router-link>
+        <el-tag type="info" size="small">{{ timeZoneLabel }}</el-tag>
+        <nav class="nav-links">
+          <router-link to="/" :class="navClass('/')">{{ t('nav.portal') }}</router-link>
+          <router-link to="/ocean-booking-bank" :class="navClass('/ocean-booking-bank')">{{ t('nav.ocean') }}</router-link>
+          <router-link to="/carrier-booking" :class="navClass('/carrier-booking')">{{ t('nav.carrier') }}</router-link>
+        </nav>
       </div>
-      <div class="flex items-center gap-2">
-        <el-select v-model="lang" size="small" style="width:140px">
+      <div class="header-right">
+        <el-select v-model="lang" size="small" style="width: 140px">
           <el-option label="English" value="en" />
           <el-option label="繁體中文" value="zh-TW" />
           <el-option label="简体中文" value="zh-CN" />
         </el-select>
-        <el-button size="small" @click="$router.push('/diagnostics')">Diagnostics</el-button>
-        <el-button size="small" type="primary" @click="logout" v-if="auth.isAuthenticated">{{ auth.currentUser?.username }} · Logout</el-button>
-        <el-button size="small" type="primary" @click="$router.push('/login')" v-else>Login</el-button>
+        <el-select v-model="role" size="small" style="width: 140px">
+          <el-option label="OP" value="OP" />
+          <el-option label="Viewer" value="Viewer" />
+        </el-select>
+        <el-tag size="small" type="success">{{ user.username }}</el-tag>
       </div>
     </el-header>
-    <el-main>
+    <el-main class="app-main">
       <router-view />
     </el-main>
   </el-container>
@@ -24,13 +31,16 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
+import { useUserStore } from './stores/user'
+import { timeZoneLabel } from './utils/datetime'
 
 const { t, locale } = useI18n()
-const auth = useAuthStore()
 const settings = useSettingsStore()
+const user = useUserStore()
+const route = useRoute()
 
 const lang = computed({
   get: () => settings.lang,
@@ -40,18 +50,61 @@ const lang = computed({
   },
 })
 
-function logout() {
-  auth.logout()
-  location.href = '/#/login'
+const role = computed({
+  get: () => user.role,
+  set: (value: 'OP' | 'Viewer') => {
+    user.setRole(value)
+  },
+})
+
+function navClass(path: string) {
+  return ['nav-link', route.path === path ? 'active' : ''].join(' ').trim()
 }
 </script>
 
-<style>
-body, html, #app {
-  margin: 0; padding: 0; height: 100%;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial;
+<style scoped>
+.app-shell {
+  min-height: 100vh;
 }
-.el-header { border-bottom: 1px solid #eee; }
-.flex { display:flex } .items-center{align-items:center} .justify-between{justify-content:space-between}
-.gap-2 { gap: .5rem }
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid #ebeef5;
+  gap: 16px;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.app-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f2d3d;
+  text-decoration: none;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-link {
+  color: #606266;
+  text-decoration: none;
+  font-weight: 500;
+}
+.nav-link.active {
+  color: #409eff;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.app-main {
+  background: #f5f7fa;
+  padding: 0;
+}
 </style>
